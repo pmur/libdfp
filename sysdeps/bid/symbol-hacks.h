@@ -26,80 +26,20 @@
    convertions. These bindings avoids intra library  PLT calls generations,
    since libdfp provides such symbols.  */
 
-asm ("__bid_floatsidd  = __GI___bid_floatsidd");
-asm ("__bid_floatditd  = __GI___bid_floatditd");
-asm ("__bid_floatsitd  = __GI___bid_floatsitd");
-asm ("__bid_floatdidd  = __GI___bid_floatdidd");
-asm ("__bid_floatdisd  = __GI___bid_floatdisd");
-asm ("__bid_floatsisd  = __GI___bid_floatsisd");
-
-asm ("__bid_floatunsdisd  = __GI___bid_floatunsdisd");
-asm ("__bid_floatunsdidd  = __GI___bid_floatunsdidd");
-
 #if HAVE_UINT128_T
+asm ("__bid_floattisd  = __GI___bid_floattisd");
+asm ("__bid_floatunstisd  = __GI___bid_floatunstisd");
+asm ("__bid_floattidd  = __GI___bid_floattidd");
+asm ("__bid_floatunstidd  = __GI___bid_floatunstidd");
 asm ("__bid_floattitd  = __GI___bid_floattitd");
-asm ("__bid_floatunsditd  = __GI___bid_floatunsditd");
+asm ("__bid_floatunstitd  = __GI___bid_floatunstitd");
+
+asm ("__bid_fixtdti = __GI___bid_fixtdti");
+asm ("__bid_fixunstdti = __GI___bid_fixunstdti");
+asm ("__bid_fixddti = __GI___bid_fixddti");
+asm ("__bid_fixunsddti = __GI___bid_fixunsddti");
+asm ("__bid_fixsdti = __GI___bid_fixsdti");
+asm ("__bid_fixunssdti = __GI___bid_fixunssdti");
 #endif
-
-asm ("__bid_truncdddf  = __GI___bid_truncdddf");
-asm ("__bid_trunctddf  = __GI___bid_trunctddf");
-asm ("__bid_trunctddd2 = __GI___bid_trunctddd2");
-asm ("__bid_truncddsd2 = __GI___bid_truncddsd2");
-asm ("__bid_truncdfsd  = __GI___bid_truncdfsd");
-asm ("__bid_trunctdsd2 = __GI___bid_trunctdsd2");
-
-asm ("__bid_extendsddf = __GI___bid_extendsddf");
-asm ("__bid_extenddftd = __GI___bid_extenddftd");
-asm ("__bid_extenddfdd = __GI___bid_extenddfdd");
-asm ("__bid_extendsdtd2 = __GI___bid_extendsdtd2");
-asm ("__bid_extendddtd2 = __GI___bid_extendddtd2");
-
-asm ("__bid_fixsdsi = __GI___bid_fixsdsi");
-asm ("__bid_fixdddi = __GI___bid_fixdddi");
-asm ("__bid_fixddsi = __GI___bid_fixddsi");
-asm ("__bid_fixsddi = __GI___bid_fixsddi");
-asm ("__bid_fixtddi = __GI___bid_fixtddi");
-asm ("__bid_fixtdsi = __GI___bid_fixtdsi");
-
-asm ("__bid_fixunsdddi = __GI___bid_fixunsdddi");
-asm ("__bid_fixunssddi = __GI___bid_fixunssddi");
-
-asm ("__bid_addsd3 = __GI___bid_addsd3");
-asm ("__bid_addtd3 = __GI___bid_addtd3");
-asm ("__bid_adddd3 = __GI___bid_adddd3");
-
-asm ("__bid_subdd3 = __GI___bid_subdd3");
-asm ("__bid_subsd3 = __GI___bid_subsd3");
-asm ("__bid_subtd3 = __GI___bid_subtd3");
-
-asm ("__bid_divsd3 = __GI___bid_divsd3");
-asm ("__bid_divtd3 = __GI___bid_divtd3");
-asm ("__bid_divdd3 = __GI___bid_divdd3");
-
-asm ("__bid_gtdd2 = __GI___bid_gtdd2");
-asm ("__bid_gtds2 = __GI___bid_gtsd2");
-asm ("__bid_gtdt2 = __GI___bid_gttd2");
-
-asm ("__bid_mulsd3 = __GI___bid_mulsd3");
-asm ("__bid_multd3 = __GI___bid_multd3");
-asm ("__bid_muldd3 = __GI___bid_muldd3");
-
-asm ("__bid_gtsd2 = __GI___bid_gtsd2");
-asm ("__bid_gttd2 = __GI___bid_gttd2");
-
-asm ("__bid_ltdd2 = __GI___bid_ltdd2");
-asm ("__bid_ltsd2 = __GI___bid_ltsd2");
-asm ("__bid_lttd2 = __GI___bid_lttd2");
-
-asm ("__bid_eqdd2 = __GI___bid_eqdd2");
-asm ("__bid_eqsd2 = __GI___bid_eqsd2");
-asm ("__bid_eqtd2 = __GI___bid_eqtd2");
-
-asm ("__bid_nedd2 = __GI___bid_nedd2");
-asm ("__bid_nesd2 = __GI___bid_nesd2");
-asm ("__bid_netd2 = __GI___bid_netd2");
-
-asm ("__bid_letd2 = __GI___bid_letd2");
-asm ("__bid_getd2 = __GI___bid_getd2");
 
 #endif

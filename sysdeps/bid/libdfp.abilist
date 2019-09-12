@@ -10,29 +10,13 @@ LIBDFP_1.0.0
  __bid_eqsd2 F
  __bid_eqtd2 F
  __bid_extendddtd2 F
- __bid_extendddtf F
- __bid_extenddfdd F
- __bid_extenddftd F
- __bid_extendsddd2 F
- __bid_extendsddf F
  __bid_extendsdtd2 F
- __bid_extendsdtf F
- __bid_extendsfdd F
- __bid_extendsfsd F
- __bid_extendsftd F
- __bid_extendtftd F
  __bid_fixdddi F
  __bid_fixddsi F
  __bid_fixsddi F
  __bid_fixsdsi F
  __bid_fixtddi F
  __bid_fixtdsi F
- __bid_fixunsdddi F
- __bid_fixunsddsi F
- __bid_fixunssddi F
- __bid_fixunssdsi F
- __bid_fixunstddi F
- __bid_fixunstdsi F
  __bid_floatdidd F
  __bid_floatdisd F
  __bid_floatditd F
@@ -42,17 +26,10 @@ LIBDFP_1.0.0
  __bid_floatunsdidd F
  __bid_floatunsdisd F
  __bid_floatunsditd F
- __bid_floatunssidd F
- __bid_floatunssisd F
- __bid_floatunssitd F
- __bid_gedd2 F
- __bid_gesd2 F
  __bid_getd2 F
  __bid_gtdd2 F
  __bid_gtsd2 F
  __bid_gttd2 F
- __bid_ledd2 F
- __bid_lesd2 F
  __bid_letd2 F
  __bid_ltdd2 F
  __bid_ltsd2 F
@@ -66,21 +43,8 @@ LIBDFP_1.0.0
  __bid_subdd3 F
  __bid_subsd3 F
  __bid_subtd3 F
- __bid_truncdddf F
- __bid_truncddsd2 F
- __bid_truncddsf F
- __bid_truncdfsd F
- __bid_truncsdsf F
  __bid_trunctddd2 F
- __bid_trunctddf F
  __bid_trunctdsd2 F
- __bid_trunctdsf F
- __bid_trunctdtf F
- __bid_trunctfdd F
- __bid_trunctfsd F
- __bid_unorddd2 F
- __bid_unordsd2 F
- __bid_unordtd2 F
  acosd128 F
  acosd32 F
  acosd64 F

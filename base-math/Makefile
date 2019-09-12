@@ -18,6 +18,9 @@
 #
 # Please see libdfp/COPYING.txt for more information.  */
 
+# Lean on the libgcc versions of these.
+
+ifneq ($(dfp_encoding),bid)
 libdfp_files += addsd3 adddd3 addtd3 \
 		divsd3 divdd3 divtd3 \
 		eqsd2 eqdd2 eqtd2 \
@@ -46,6 +49,7 @@ libdfp_files += addsd3 adddd3 addtd3 \
 		trunctdsf trunctddf trunctdtf \
 		unordsd2 unorddd2 unordtd2 \
 		classify
+endif
 
 libdfp_ti_files += fixsdti fixddti \
 		   fixunssdti fixunsddti \
