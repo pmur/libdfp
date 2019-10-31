@@ -1,0 +1,11 @@
+#
+cos 0
+cos 3.14
+cos 11e-18
+cos 19e-18
+cos 199e-18
+
+sin 0
+sin 3.14
+
+# todo, correctly defined constants
