@@ -1,2 +1,2 @@
 # The is a generated file from gen-auto-dfp-tests
-libdfp-auto-tests = cos sin
+libdfp-auto-tests = cos sin exp

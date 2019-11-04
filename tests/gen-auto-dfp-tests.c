@@ -74,9 +74,15 @@
 
 
 /* libbid uses the level of precision converting. Let's start here. */
-#define DFP_MPFR_PREC 384
+#define DFP_MPFR_PREC 512
 #define DFP_DEFAULT_RND MPFR_RNDN
 
+/*
+  TODO: only mpfr now. Assuming libdecnumber is sufficiently correctly for
+        for the functions it natively supports (e.g <= 1ULP), we can use
+        it to bootstrap/verify the mpfr usage below for functions libdecnumber
+        does not natively support.
+*/
 enum func_type
 {
   mpfr_d_d,
@@ -88,6 +94,7 @@ struct dec_fmt_param
   int p;
   int emax;
   int emin;
+  const char *name;
   mpfr_t frmax;
   mpfr_t frmin;
 };
@@ -100,19 +107,11 @@ enum dec_type
   decimal_type_cnt,
 };
 
-const char *fmt_str[] =
-{
-  "decimal32",
-  "decimal64",
-  "decimal128"
-};
-
-
 struct dec_fmt_param dec_fmt_param[] =
 {
-  {7, 96, -95},
-  {16, 384, -383},
-  {34, 6144, -6143},
+  {7, 96, -95, "decimal32"},
+  {16, 384, -383, "decimal64"},
+  {34, 6144, -6143, "decimal128"},
 };
 
 /* Keep the results as strings. */
@@ -133,8 +132,7 @@ struct test
 {
   int line;
   const char *stest; /* allocated */
-  mpfr_t frin;
-  mpfr_t frout;
+  mpfr_t frin[decimal_type_cnt];
   int excepts;
   result_t input; /* TODO: only one type support now. */
   result_t result; /* TODO: only one type supported now. */
@@ -193,18 +191,27 @@ alloc_test(struct testf *tf, mpfr_t v, char *test)
     error (EXIT_FAILURE, errno, "realloc");
 
   memset (t, 0, sizeof (*t));
-  mpfr_init_set(t->frin, v, DFP_DEFAULT_RND);
-  mpfr_init (t->frout);
+  for (int fmt = 0; fmt < decimal_type_cnt; fmt++)
+    {
+      char str[128];
+
+      /*
+        This wins no awards, but round-trip values through
+        strings to better approximate the _DecimalN value.
+      */
+      mpfr_snprintf (str, sizeof(str) - 1, "%.*Re", dec_fmt_param[fmt].p - 1, v);
+      mpfr_init_set_str (t->frin[fmt], str, 0, DFP_DEFAULT_RND);
+    }
   t->stest = test;
   t->tf = tf;
 }
 
 /*
- * For now, only parse lines of the form:
- *  func value
- *
- *  Add more complexity as required for testing.
- */
+  For now, only parse lines of the form:
+  func value
+
+  Add more complexity as required for testing.
+*/
 void
 parse_line(char *line, const char *filename, size_t lineno)
 {
@@ -212,6 +219,7 @@ parse_line(char *line, const char *filename, size_t lineno)
   char *val = strchr (line, ' ');
   char *func = NULL;
   struct testf *t = NULL;
+  char *endptr;
   mpfr_t frin;
 
   if (!val)
@@ -230,12 +238,23 @@ parse_line(char *line, const char *filename, size_t lineno)
 
   errno = 0;
   mpfr_init (frin);
-  mpfr_strtofr (frin, val, NULL, 10, DFP_DEFAULT_RND);
-  if (!errno)
+
+  /* For now, only accept decimal inputs as radix-2 operands can cause
+     false errors if they fall between 2 dfp values.
+     TODO: can rounding to the nearest radix-10 value solve these errors?
+
+     e.g, the value taken from glibc libm test suite:
+
+     exp 0x2.c5c85fdf473dep+8
+     exp 7097827128933839730962063185870647e-31
+  */
+  mpfr_strtofr (frin, val, &endptr, 10, DFP_DEFAULT_RND);
+
+  if (endptr && *endptr == 0)
     alloc_test (t, frin, test);
-  mpfr_clear (frin);
-  if (errno)
+  else
     goto failure;
+  mpfr_clear (frin);
 
   return; 
 
@@ -247,26 +266,24 @@ failure:
 
 /* Slightly misleaning... round bfp to dfp result using default rounding mode. */
 void
-round_result(mpfr_t in, struct decimal_value *out)
+round_result(mpfr_t in[decimal_type_cnt], struct decimal_value *out)
 {
-  /* TODO: ignore nans */
-  if (mpfr_nan_p (in))
-    error(EXIT_FAILURE, 0, "Encountered NaN");
-
   for (int i = 0; i < decimal_type_cnt; i++)
     {
-      /* Handle 0 and inf cases */
-      if (mpfr_cmpabs (in, dec_fmt_param[i].frmax) > 0)
-        sprintf (out->v[i], "%cInf", mpfr_signbit(in) ? '-' : ' ' );
-      else if (mpfr_cmpabs(dec_fmt_param[i].frmin, in) > 0)
-        sprintf (out->v[i], "%c0", mpfr_signbit(in) ? '-' : '+' );
+      /* Handle 0 and inf cases. TODO: NAN */
+      if (mpfr_nan_p (in[i]))
+        error(EXIT_FAILURE, 0, "Encountered NaN");
+      else if (mpfr_cmpabs (in[i], dec_fmt_param[i].frmax) > 0)
+        sprintf (out->v[i], "%cInf", mpfr_signbit (in[i]) ? '-' : ' ' );
+      else if (mpfr_cmpabs(dec_fmt_param[i].frmin, in[i]) > 0)
+        sprintf (out->v[i], "%c0", mpfr_signbit (in[i]) ? '-' : '+' );
       else
         {
           mpfr_exp_t exp;
-          uintptr_t adj = mpfr_signbit (in) ? 1 : 0;
+          uintptr_t adj = mpfr_signbit (in[i]) ? 1 : 0;
 
           /* Remove implicit radix point by shifting the exponent per format */
-          mpfr_get_str (out->v[i], &exp, 10, dec_fmt_param[i].p, in, DFP_DEFAULT_RND);
+          mpfr_get_str (out->v[i], &exp, 10, dec_fmt_param[i].p, in[i], DFP_DEFAULT_RND);
           exp -= dec_fmt_param[i].p;
           if (exp > dec_fmt_param[i].emax || exp < dec_fmt_param[i].emin)
             error(EXIT_FAILURE, 0, "Conversion failure. Exponent out of range");
@@ -281,14 +298,27 @@ compute(struct test *t)
   switch (t->tf->ftype)
     {
       case mpfr_d_d:
-        t->tf->func.mpfr_d_d (t->frout, t->frin, DFP_DEFAULT_RND);
-        round_result (t->frin, &t->input.d_);
-        round_result (t->frout, &t->result.d_);
+        {
+          mpfr_t tmp[decimal_type_cnt];
+
+          for (int fmt=0; fmt < decimal_type_cnt; fmt++)
+            {
+              mpfr_init (tmp[fmt]);
+              t->tf->func.mpfr_d_d (tmp[fmt], t->frin[fmt], DFP_DEFAULT_RND);
+            }
+
+          round_result (t->frin, &t->input.d_);
+          round_result (tmp, &t->result.d_);
+
+          for (int fmt=0; fmt < decimal_type_cnt; fmt++)
+            mpfr_clear (tmp[fmt]);
+        }
         break;
       default:
         error (EXIT_FAILURE, 0, "Unknown function type %d", (int)t->tf->ftype);
         break;
     }
+
 }
 
 void
@@ -363,7 +393,7 @@ gen_output(const char *fprefix)
                 {
                 case mpfr_d_d:
                   /* fprintf (out, "= %s %s %s : %s\n", t->tf->fname, fmt_str[fmt], t->input.d_.v[fmt], t->result.d_.v[fmt]); */
-                  fprintf (out, "%s %s %s\n", t->input.d_.v[fmt], t->result.d_.v[fmt], fmt_str[fmt]);
+                  fprintf (out, "%s %s %s\n", t->input.d_.v[fmt], t->result.d_.v[fmt], dec_fmt_param[fmt].name);
                   break;
 
                 default:
