@@ -104,7 +104,7 @@ enum dec_type
   decimal32,
   decimal64,
   decimal128,
-  decimal_type_cnt,
+  decimal_fmt_cnt,
 };
 
 struct dec_fmt_param dec_fmt_param[] =
@@ -113,50 +113,127 @@ struct dec_fmt_param dec_fmt_param[] =
   {16, 384, -383, "decimal64"},
   {34, 6144, -6143, "decimal128"},
 };
+#define DEC_MAX_FMT_STR (10)
 
 /* Keep the results as strings. */
-struct decimal_value
+typedef struct decimal_value
 {
   /* Enough to hold <sign><digits>e<sign><exp digits> for the largest type */
   char v[3][1 + 34 + 2 + 4 + 1];
-};
+} decimal_value_t;
+#define DEC_MAX_STR (int)(sizeof(((decimal_value_t*)0)->v[0]) - 1)
 
 typedef union result
   {
   int si;
   long long int di;
-  struct decimal_value d_;
+  decimal_value_t d_;
   } result_t;
 
-struct test
+struct testf;
+
+typedef struct test
 {
   int line;
   const char *stest; /* allocated */
-  mpfr_t frin[decimal_type_cnt];
+  mpfr_t frin[decimal_fmt_cnt];
   int excepts;
   result_t input; /* TODO: only one type support now. */
   result_t result; /* TODO: only one type supported now. */
-  const struct testf *tf;
-};
+  struct testf *tf;
+} test_t;
 
 union func_ptr
 {
   int (*mpfr_d_d) (mpfr_t out, mpfr_t const in, mpfr_rnd_t rnd);
 };
 
-struct testf
+typedef struct testf
 {
   enum func_type ftype;
   union func_ptr func;
   const char *fname;
   size_t testno;
-  struct test *tests;
+  test_t *tests;
+  char **compat_tests; /* TODO: holdover tests while transitioning */
+  size_t compat_testno;
+  size_t compat_chr_skip;
+} testf_t;
+
+typedef void (*special_init_func)(const char *v, mpfr_t in[decimal_fmt_cnt]);
+
+typedef struct special
+{
+  const char *name;
+  special_init_func set_val;
+} special_t;
+
+void get_nan(const char *v, mpfr_t in[decimal_fmt_cnt])
+{
+  for(int i = 0; i < decimal_fmt_cnt; i++)
+    {
+      mpfr_init_set_si (in[i], 0, DFP_DEFAULT_RND);
+      mpfr_set_nan (in[i]);
+      mpfr_setsign (in[i], in[i], v[0] == '-' ? 1 : 0, DFP_DEFAULT_RND);
+    }
+}
+
+/* Add a mark to the payload. */
+void get_snan(const char *v, mpfr_t in[decimal_fmt_cnt])
+{
+  for(int i = 0; i < decimal_fmt_cnt; i++)
+    {
+      mpfr_init_set_si (in[i], 0, DFP_DEFAULT_RND);
+      mpfr_set_nan (in[i]);
+      mpfr_setsign (in[i], in[i], v[0] == '-' ? 1 : 0, DFP_DEFAULT_RND);
+    }
+}
+
+void get_min(const char *v, mpfr_t in[decimal_fmt_cnt])
+{
+  for(int i = 0; i < decimal_fmt_cnt; i++)
+    {
+      mpfr_init_set (in[i], dec_fmt_param[i].frmin, DFP_DEFAULT_RND);
+      mpfr_setsign (in[i], in[i], v[0] == '-' ? 1 : 0, DFP_DEFAULT_RND);
+    }
+}
+
+void get_max(const char *v, mpfr_t in[decimal_fmt_cnt])
+{
+  for(int i = 0; i < decimal_fmt_cnt; i++)
+    {
+      mpfr_init_set (in[i], dec_fmt_param[i].frmax, DFP_DEFAULT_RND);
+      mpfr_setsign (in[i], in[i], v[0] == '-' ? 1 : 0, DFP_DEFAULT_RND);
+    }
+}
+
+void get_inf(const char *v, mpfr_t in[decimal_fmt_cnt])
+{
+  for(int i = 0; i < decimal_fmt_cnt; i++)
+    {
+      mpfr_init (in[i]);
+      mpfr_set_inf (in[i], v[0] == '-' ? -1 : 0);
+    }
+}
+
+/* TODO: glibc libm punts NaN tests. Should we? sNaN requires some more though */
+special_t dec_spec_vals[] =
+{
+  { "nan", get_nan },
+  { "-nan", get_nan },
+  { "min", get_min },
+  { "-min", get_min },
+  { "max", get_max },
+  { "-max", get_max },
+  { "inf", get_inf },
+  { "-inf", get_inf },
+  {}
 };
 
 #define DECL_TESTF_D_D(func) { mpfr_d_d, { .mpfr_d_d = mpfr_ ## func,  }, \
-                               #func, 0, NULL }
+                               #func, 0, NULL, NULL, 0, sizeof(#func) + 1 }
 
-struct testf testlist[] =
+testf_t testlist[] =
 {
   DECL_TESTF_D_D(cos),
   DECL_TESTF_D_D(acos),
@@ -179,9 +256,11 @@ xstrdup(char *in)
 }
 
 void
-alloc_test(struct testf *tf, mpfr_t v, char *test)
+alloc_test(testf_t *tf, const char *val, char *test)
 {
-  struct test *t = NULL;
+  test_t *t = NULL;
+  mpfr_t frin;
+  char *endptr;
 
   tf->testno++;
   tf->tests = realloc (tf->tests, tf->testno * sizeof (tf->tests[0]));
@@ -189,21 +268,44 @@ alloc_test(struct testf *tf, mpfr_t v, char *test)
 
   if (!tf->tests)
     error (EXIT_FAILURE, errno, "realloc");
-
   memset (t, 0, sizeof (*t));
-  for (int fmt = 0; fmt < decimal_type_cnt; fmt++)
-    {
-      char str[128];
-
-      /*
-        This wins no awards, but round-trip values through
-        strings to better approximate the _DecimalN value.
-      */
-      mpfr_snprintf (str, sizeof(str) - 1, "%.*Re", dec_fmt_param[fmt].p - 1, v);
-      mpfr_init_set_str (t->frin[fmt], str, 0, DFP_DEFAULT_RND);
-    }
   t->stest = test;
   t->tf = tf;
+
+  /* Scan for specials, and skip conversion below. Ignore case. */
+  for (special_t *sv = &dec_spec_vals[0]; sv->name; sv++)
+    if (!strcasecmp(sv->name, val))
+      {
+        sv->set_val (val, t->frin);
+        return;
+      }
+
+  /* For now, only accept decimal inputs as radix-2 operands can cause
+     false errors if they fall between 2 dfp values.
+     TODO: can rounding to the nearest radix-10 value solve these errors?
+
+     e.g, the value taken from glibc libm test suite:
+
+     exp 0x2.c5c85fdf473dep+8
+     exp 7097827128933839730962063185870647e-31
+  */
+  mpfr_init (frin);
+  mpfr_strtofr (frin, val, &endptr, 10, DFP_DEFAULT_RND);
+  if (endptr && *endptr == 0)
+    for (int fmt = 0; fmt < decimal_fmt_cnt; fmt++)
+      {
+        char str[128];
+
+        /*
+          This wins no awards, but round-trip values through
+          strings to better approximate the _DecimalN value.
+        */
+        mpfr_snprintf (str, sizeof(str) - 1, "%.*Re", dec_fmt_param[fmt].p - 1, frin);
+        mpfr_init_set_str (t->frin[fmt], str, 0, DFP_DEFAULT_RND);
+      }
+  mpfr_clear(frin);
+  if (!endptr || *endptr != 0)
+    error (EXIT_FAILURE, errno, "Failed to convert: %s", val);
 }
 
 /*
@@ -218,9 +320,8 @@ parse_line(char *line, const char *filename, size_t lineno)
   char *test = xstrdup (line);
   char *val = strchr (line, ' ');
   char *func = NULL;
-  struct testf *t = NULL;
-  char *endptr;
-  mpfr_t frin;
+  testf_t *t = NULL;
+  bool passthru = false;
 
   if (!val)
     goto failure;
@@ -229,6 +330,11 @@ parse_line(char *line, const char *filename, size_t lineno)
   *val = '\0';
   val++;
 
+  /* Don't process these, just pass these lines through. e.g for sNAN */
+  passthru = func[0] == '\'';
+  if (passthru)
+      func++;
+
   for (t = &testlist[0]; t->fname; t++)
     if (!strcmp (t->fname, func))
       break;
@@ -236,26 +342,17 @@ parse_line(char *line, const char *filename, size_t lineno)
   if (!t->fname)
     goto failure;
 
-  errno = 0;
-  mpfr_init (frin);
-
-  /* For now, only accept decimal inputs as radix-2 operands can cause
-     false errors if they fall between 2 dfp values.
-     TODO: can rounding to the nearest radix-10 value solve these errors?
-
-     e.g, the value taken from glibc libm test suite:
-
-     exp 0x2.c5c85fdf473dep+8
-     exp 7097827128933839730962063185870647e-31
-  */
-  mpfr_strtofr (frin, val, &endptr, 10, DFP_DEFAULT_RND);
-
-  if (endptr && *endptr == 0)
-    alloc_test (t, frin, test);
+  if (!passthru)
+    alloc_test (t, val, test);
   else
-    goto failure;
-  mpfr_clear (frin);
-
+    {
+      t->compat_testno++;
+      t->compat_tests = realloc (t->compat_tests, sizeof(*t->compat_tests) * t->compat_testno);
+      if (!t->compat_tests)
+        error (EXIT_FAILURE, 0, "realloc failure");
+      t->compat_tests[t->compat_testno - 1] = test;
+    }
+  
   return; 
 
 failure:
@@ -266,17 +363,17 @@ failure:
 
 /* Slightly misleaning... round bfp to dfp result using default rounding mode. */
 void
-round_result(mpfr_t in[decimal_type_cnt], struct decimal_value *out)
+round_result(mpfr_t in[decimal_fmt_cnt], decimal_value_t *out)
 {
-  for (int i = 0; i < decimal_type_cnt; i++)
+  for (int i = 0; i < decimal_fmt_cnt; i++)
     {
-      /* Handle 0 and inf cases. TODO: NAN */
+      /* Handle 0 and inf cases. */
       if (mpfr_nan_p (in[i]))
-        error(EXIT_FAILURE, 0, "Encountered NaN");
+        sprintf (out->v[i], "%sNaN", mpfr_signbit (in[i]) ? "-" : "");
       else if (mpfr_cmpabs (in[i], dec_fmt_param[i].frmax) > 0)
-        sprintf (out->v[i], "%cInf", mpfr_signbit (in[i]) ? '-' : ' ' );
-      else if (mpfr_cmpabs(dec_fmt_param[i].frmin, in[i]) > 0)
-        sprintf (out->v[i], "%c0", mpfr_signbit (in[i]) ? '-' : '+' );
+        sprintf (out->v[i], "%sInf", mpfr_signbit (in[i]) ? "-" : "");
+      else if (mpfr_cmpabs(dec_fmt_param[i].frmin, in[i]) >= 0)
+        sprintf (out->v[i], "%s0", mpfr_signbit (in[i]) ? "-" : "");
       else
         {
           mpfr_exp_t exp;
@@ -293,15 +390,15 @@ round_result(mpfr_t in[decimal_type_cnt], struct decimal_value *out)
 }
 
 void
-compute(struct test *t)
+compute(test_t *t)
 {
   switch (t->tf->ftype)
     {
       case mpfr_d_d:
         {
-          mpfr_t tmp[decimal_type_cnt];
+          mpfr_t tmp[decimal_fmt_cnt];
 
-          for (int fmt=0; fmt < decimal_type_cnt; fmt++)
+          for (int fmt=0; fmt < decimal_fmt_cnt; fmt++)
             {
               mpfr_init (tmp[fmt]);
               t->tf->func.mpfr_d_d (tmp[fmt], t->frin[fmt], DFP_DEFAULT_RND);
@@ -310,7 +407,7 @@ compute(struct test *t)
           round_result (t->frin, &t->input.d_);
           round_result (tmp, &t->result.d_);
 
-          for (int fmt=0; fmt < decimal_type_cnt; fmt++)
+          for (int fmt=0; fmt < decimal_fmt_cnt; fmt++)
             mpfr_clear (tmp[fmt]);
         }
         break;
@@ -324,13 +421,16 @@ compute(struct test *t)
 void
 init_fmt(void)
 {
-  struct decimal_value d;
+  decimal_value_t d;
  
   /* get approximate maximum finite value in radix-2 */ 
-  for (int i = 0; i < decimal_type_cnt; i++)
+  for (int i = 0; i < decimal_fmt_cnt; i++)
     {
+      int p = dec_fmt_param[i].p;
+
+      /* TODO: add a tiny value e.g 1eMIN_FMT_EXP */
       memset(d.v[i], '9', dec_fmt_param[i].p);
-      sprintf(d.v[i] + dec_fmt_param[i].p,"e%d",dec_fmt_param[i].emax);
+      sprintf(d.v[i] + p,"e%d",dec_fmt_param[i].emax - p + 1);
       mpfr_init_set_str(dec_fmt_param[i].frmax, d.v[i], 10, MPFR_RNDZ);
       sprintf(d.v[i] + dec_fmt_param[i].p,"e%d",dec_fmt_param[i].emin);
       mpfr_init_set_str(dec_fmt_param[i].frmin, d.v[i], 10, MPFR_RNDZ);
@@ -363,7 +463,7 @@ gen_output(const char *fprefix)
                        "libdfp-auto-tests =");
     }
 
-  for (struct testf *tf = &testlist[0]; tf->fname; tf++)
+  for (testf_t *tf = &testlist[0]; tf->fname; tf++)
     {
       if (!tf->testno)
         continue;
@@ -384,16 +484,18 @@ gen_output(const char *fprefix)
 
       for (int i = 0; i < tf->testno; i++)
         {
-          struct test *t = &tf->tests[i];
+          test_t *t = &tf->tests[i];
 
           /* fprintf (out, "%s\n", t->stest); */
-          for(int fmt = 0; fmt < decimal_type_cnt; fmt++)
+          for (int fmt = 0; fmt < decimal_fmt_cnt; fmt++)
             {
-              switch(t->tf->ftype)
+              switch (t->tf->ftype)
                 {
                 case mpfr_d_d:
                   /* fprintf (out, "= %s %s %s : %s\n", t->tf->fname, fmt_str[fmt], t->input.d_.v[fmt], t->result.d_.v[fmt]); */
-                  fprintf (out, "%s %s %s\n", t->input.d_.v[fmt], t->result.d_.v[fmt], dec_fmt_param[fmt].name);
+                  fprintf (out, "%-*s %-*s %-*s\n", DEC_MAX_STR, t->input.d_.v[fmt],
+                                                    DEC_MAX_STR, t->result.d_.v[fmt],
+                                                    DEC_MAX_FMT_STR, dec_fmt_param[fmt].name);
                   break;
 
                 default:
@@ -402,6 +504,10 @@ gen_output(const char *fprefix)
                 }
             }
         }
+
+      /* TODO: passthrough tests to transition to glibc style testing. */
+      for (int i = 0; i < tf->compat_testno; i++)
+        fprintf (out, "%s\n", tf->compat_tests[i] + tf->compat_chr_skip);
 
       if (!debug)
         fclose(out);
@@ -443,7 +549,7 @@ main(int args, char **argv)
       continue;
 
     /* chomp trailing whitespace/delimiter if any */
-    while(isspace(line[ilinelen - 1]))
+    while (isspace(line[ilinelen - 1]))
       {
         line[ilinelen - 1] = '\0';
         ilinelen--;
@@ -453,7 +559,7 @@ main(int args, char **argv)
   }
 
   /* Compute expected values. TODO: +/- 1ULP for now. */
-  for (struct testf *tf = &testlist[0]; tf->fname; tf++)
+  for (testf_t *tf = &testlist[0]; tf->fname; tf++)
     for (int i = 0; i < tf->testno; i++)
       compute (&tf->tests[i]);
 
