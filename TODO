@@ -22,16 +22,9 @@ test cases.
 
 Finish make check test suite.
 
-Clear up symbols and hidden symbol usage and export and make sure we aren't
-using the PLT from within libdfp.
-
 Optimize the math routines for hardware dfp support.
 
-Implement dpd backend for x86 and x86_64.
-
 Prototype versioned symbols support.
-
-Implement libbid backend for x86_64.
 
 Write Man Page
 
