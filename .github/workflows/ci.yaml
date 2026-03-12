@@ -11,7 +11,7 @@ on:
 jobs:
   build:
 
-    runs-on: ubuntu-latest
+    runs-on: [ubuntu-latest, ubuntu-24.04-ppc64le-p10, ubuntu-24.04-s390x, ubuntu-24.04-ppc64le]
 
     steps:
     - uses: actions/checkout@v4
